@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Distributed Energy Trading - Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    label { display:block; margin-top:10px;}
+    input, button { padding:8px; margin-top:5px; }
+    .row { margin-bottom:12px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
+</head>
+<body>
+  <h2>Distributed Energy Trading (Demo)</h2>
+  <div>
+    <button id="connectBtn">Connect Wallet</button>
+    <div id="wallet"></div>
+  </div>
+
+  <h3>Create Offer</h3>
+  <div class="row">
+    <label>Energy (Wh): <input id="energy" type="number" value="1000"></label>
+    <label>Price (ETH): <input id="price" type="text" value="0.01"></label>
+    <button id="createOffer">Create Offer</button>
+  </div>
+
+  <h3>Buy Offer</h3>
+  <div class="row">
+    <label>Offer ID: <input id="offerId" type="number" value="1"></label>
+    <label>Price to send (ETH): <input id="pay" type="text" value="0.01"></label>
+    <button id="buyOffer">Buy Offer</button>
+  </div>
+
+  <h3>Get Offer</h3>
+  <div class="row">
+    <label>Offer ID: <input id="getId" type="number" value="1"></label>
+    <button id="getOffer">Get Offer</button>
+    <pre id="offerInfo"></pre>
+  </div>
+
+  <script>
+    // Replace this address with deployed contract after running deploy script
+    let contractAddress = "";
+    // Minimal ABI for the demo (only functions we need)
+    const abi = [
+      "function createOffer(uint256 energyWh, uint256 priceWei)",
+      "function buyOffer(uint256 offerId) payable",
+      "function getOffer(uint256 offerId) view returns (address seller, uint256 energyWh, uint256 priceWei, bool active)",
+      "event OfferCreated(uint256 indexed offerId, address indexed seller, uint256 energyWh, uint256 priceWei)",
+      "event OfferBought(uint256 indexed offerId, address indexed buyer, uint256 amountPaid)"
+    ];
+
+    let provider, signer, contract;
+
+    async function connect() {
+      if (window.ethereum === undefined) {
+        alert("Please install MetaMask or use a browser with ethereum provider.");
+        return;
+      }
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+      const walletAddr = await signer.getAddress();
+      document.getElementById("wallet").innerText = "Connected: " + walletAddr;
+      if (!contractAddress) {
+        contractAddress = prompt("Enter deployed contract address (from deploy script):", "");
+      }
+      contract = new ethers.Contract(contractAddress, abi, signer);
+    }
+
+    document.getElementById("connectBtn").onclick = connect;
+
+    document.getElementById("createOffer").onclick = async () => {
+      const energy = document.getElementById("energy").value;
+      const priceEth = document.getElementById("price").value;
+      const priceWei = ethers.parseEther(priceEth);
+      const tx = await contract.createOffer(energy, priceWei);
+      alert("Transaction sent. Hash: " + tx.hash);
+      await tx.wait();
+      alert("Offer created.");
+    };
+
+    document.getElementById("buyOffer").onclick = async () => {
+      const offerId = document.getElementById("offerId").value;
+      const payEth = document.getElementById("pay").value;
+      const value = ethers.parseEther(payEth);
+      const tx = await contract.buyOffer(offerId, { value });
+      alert("Buying... tx: " + tx.hash);
+      await tx.wait();
+      alert("Offer bought.");
+    };
+
+    document.getElementById("getOffer").onclick = async () => {
+      const id = document.getElementById("getId").value;
+      const res = await contract.getOffer(id);
+      document.getElementById("offerInfo").innerText = JSON.stringify({
+        seller: res[0],
+        energyWh: res[1].toString(),
+        priceWei: res[2].toString(),
+        active: res[3]
+      }, null, 2);
+    };
+  </script>
+</body>
+</html>
